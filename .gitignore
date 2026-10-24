@@ -1,0 +1,61 @@
+# Local dependencies, licensed engine checkout, models, experiments and archives
+/local/
+/runs/
+*.gguf
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.onnx
+
+# Build products and editor state
+**/Binaries/
+**/Intermediate/
+**/Saved/
+**/DerivedDataCache/
+**/build/
+**/Debug/
+**/Release/
+**/x64/
+**/.vs/
+**/.idea/
+**/.vscode/
+*.obj
+*.o
+*.lib
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.tlog
+*.user
+*.suo
+*.log
+*.utrace
+*.etl
+
+# Python / Node environments and caches
+**/__pycache__/
+*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.venv/
+**/venv/
+**/node_modules/
+**/.ipynb_checkpoints/
+*.egg-info/
+
+# Private configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.pfx
+.DS_Store
+Thumbs.db
+/.codex/
+/.agents/
+
+# Obtain the paper from its publisher instead of distributing a licensed PDF.
+/LEGO_Supporting_LLM-Enhanced_Games_with_One_Gaming_GPU.pdf

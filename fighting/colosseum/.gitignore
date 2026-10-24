@@ -1,0 +1,17 @@
+doapp.zip
+__pycache__
+.env
+test.py
+myenv/
+eval/diambra
+
+results.csv
+results/
+
+logs/
+
+.DS_Store
+env
+
+adle_notebook.ipynb
+elo_rankings.ipynb

@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "purpose": "preliminary packaged functional validation",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5070 Ti",
+    "vram_mib": 16303,
+    "driver": "610.88"
+  },
+  "software": {
+    "engine": "Unreal Engine 4.27.2",
+    "engine_commit": "d94b38ae3446da52224bedd2568c078f828b4039",
+    "llama_commit": "0a1ef309cdbb9f2024f58a38fb4c42352c5db569",
+    "cuda": "12.8",
+    "toolchain": "VS2019 v142"
+  },
+  "workload": {
+    "model": "Meta Llama 3.1 8B Instruct",
+    "quantization": "Q4_K_M",
+    "weight_checksum": null,
+    "seconds_per_mode": 20,
+    "requested_apm": 200,
+    "target_fps": 60,
+    "resolution": [
+      1920,
+      1080
+    ],
+    "context_tokens": 2048,
+    "max_output_tokens": 16,
+    "warmup_actions": 3,
+    "checkpoint_nodes": 1,
+    "cuda_graphs": false,
+    "scene": "Third Person example map",
+    "camera": "initial template camera; no scripted movement",
+    "focus": "not monitored",
+    "prompt": "You control a fighter. Health 60, enemy health 40, distance 3 meters. Available actions: dodge, attack, retreat. Choose an action and explain briefly."
+  },
+  "limitations": [
+    "One short repetition; no statistical significance established",
+    "Weight source checksum was not recorded",
+    "Both scheduled modes missed every completed-action deadline at 200 APM",
+    "No adaptive skipping, minimum-gap duration constraint or commercial-game replay"
+  ],
+  "rows": [
+    {
+      "repetition": 1,
+      "mode": "RenderOnly",
+      "actions": null,
+      "achieved_apm": null,
+      "deadline_miss_percent": null,
+      "skipped_arrivals": null,
+      "latency_p95_ms": null,
+      "admission_wait_p95_ms": null,
+      "present_rate_fps": 59.97506357906969,
+      "frame_p99_ms": 17.443,
+      "over_1_5_budget_percent": 0.08340283569641367
+    },
+    {
+      "repetition": 1,
+      "mode": "LlmOnly",
+      "actions": 67,
+      "achieved_apm": 200.56622939869257,
+      "deadline_miss_percent": 0,
+      "skipped_arrivals": 0,
+      "latency_p95_ms": 268.8986,
+      "admission_wait_p95_ms": 5.0764,
+      "present_rate_fps": null,
+      "frame_p99_ms": null,
+      "over_1_5_budget_percent": null
+    },
+    {
+      "repetition": 1,
+      "mode": "Unrestricted",
+      "actions": 46,
+      "achieved_apm": 137.3937288753097,
+      "deadline_miss_percent": 45.65217391304348,
+      "skipped_arrivals": 21,
+      "latency_p95_ms": 315.4274,
+      "admission_wait_p95_ms": 6.616899,
+      "present_rate_fps": 48.45935399393572,
+      "frame_p99_ms": 30.646,
+      "over_1_5_budget_percent": 32.61316872427984
+    },
+    {
+      "repetition": 1,
+      "mode": "InterFrame",
+      "actions": 34,
+      "achieved_apm": 101.1852312218935,
+      "deadline_miss_percent": 100,
+      "skipped_arrivals": 33,
+      "latency_p95_ms": 392.9555,
+      "admission_wait_p95_ms": 93.1521,
+      "present_rate_fps": 60.003314326989795,
+      "frame_p99_ms": 17.23,
+      "over_1_5_budget_percent": 0
+    },
+    {
+      "repetition": 1,
+      "mode": "IntraFrame",
+      "actions": 34,
+      "achieved_apm": 101.20351517908364,
+      "deadline_miss_percent": 100,
+      "skipped_arrivals": 33,
+      "latency_p95_ms": 410.9424,
+      "admission_wait_p95_ms": 106.717599,
+      "present_rate_fps": 60.00093202440321,
+      "frame_p99_ms": 17.352,
+      "over_1_5_budget_percent": 0
+    }
+  ]
+}
