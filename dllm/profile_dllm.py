@@ -152,36 +152,25 @@ def bottom_up_layer_skip(model: torch.nn.Module, skip_count: int, keep_last_laye
     end_idx = (num_layers - 1) if keep_last_layer else num_layers
     start_idx = max(1, end_idx - skip_count)
     skipped_indices = list(range(start_idx, end_idx))
+    skipped_set = set(skipped_indices)
 
-    hooks = []
+    orig_layers = list(layers)
+    orig_cfg_layers = getattr(model.config, "num_hidden_layers", num_layers)
 
-    def passthrough_hook(module, args, kwargs):
-        # Pass hidden_states straight through without running attention/FFN
-        if args:
-            return args[0]
-        if "hidden_states" in kwargs:
-            return kwargs["hidden_states"]
-        return None
-
-    for idx in skipped_indices:
-        # Register pre-forward or replacement forward
-        orig_forward = layers[idx].forward
-
-        def make_skip_forward(orig_fn):
-            def skip_forward(*args, **kwargs):
-                hidden = args[0] if len(args) > 0 else kwargs.get("hidden_states")
-                # Match tuple return signature if original layer returns a tuple
-                return (hidden,) if getattr(orig_fn, "_returns_tuple", False) else hidden
-            return skip_forward
-
-        hooks.append((idx, orig_forward))
-        layers[idx].forward = make_skip_forward(orig_forward)
+    # Temporarily keep only active layers (bypassing skipped_indices while keeping final layer)
+    kept_layers = [layer for idx, layer in enumerate(orig_layers) if idx not in skipped_set]
+    layers.clear()
+    layers.extend(kept_layers)
+    if hasattr(model.config, "num_hidden_layers"):
+        model.config.num_hidden_layers = len(kept_layers)
 
     try:
         yield skipped_indices
     finally:
-        for idx, orig_forward in hooks:
-            layers[idx].forward = orig_forward
+        layers.clear()
+        layers.extend(orig_layers)
+        if hasattr(model.config, "num_hidden_layers"):
+            model.config.num_hidden_layers = orig_cfg_layers
 
 
 def load_dllm(model_id: str, device: str, use_4bit: bool = True):
