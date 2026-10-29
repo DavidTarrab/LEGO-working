@@ -17,7 +17,12 @@ import contextlib
 import json
 import os
 import time
+import warnings
 from typing import Any, Dict, List, Optional, Tuple
+
+warnings.filterwarnings("ignore", message=".*NotOpenSSLWarning.*")
+warnings.filterwarnings("ignore", category=UserWarning, module="urllib3")
+warnings.filterwarnings("ignore", message=".*torch_dtype.*is deprecated.*")
 
 try:
     import numpy as np
@@ -114,8 +119,8 @@ def get_allocated_vram_gb(device: str) -> float:
     return 0.0
 
 
-def find_transformer_layers(model: torch.nn.Module) -> Optional[torch.nn.ModuleList]:
-    """Locate the ModuleList of transformer blocks across LLaDA, Dream, Qwen, or Llama models."""
+def find_transformer_layers_container(model: torch.nn.Module):
+    """Locate (parent_module, attr_name, ModuleList) of transformer blocks across dLLM/LLM architectures."""
     for path in (
         "model.layers",
         "model.transformer.blocks",
@@ -123,17 +128,26 @@ def find_transformer_layers(model: torch.nn.Module) -> Optional[torch.nn.ModuleL
         "transformer.h",
         "layers",
     ):
+        parts = path.split(".")
         curr = model
         found = True
-        for attr in path.split("."):
+        for attr in parts[:-1]:
             if hasattr(curr, attr):
                 curr = getattr(curr, attr)
             else:
                 found = False
                 break
-        if found and isinstance(curr, torch.nn.ModuleList):
-            return curr
-    return None
+        if found and hasattr(curr, parts[-1]):
+            target = getattr(curr, parts[-1])
+            if isinstance(target, torch.nn.ModuleList):
+                return curr, parts[-1], target
+    return None, "", None
+
+
+def find_transformer_layers(model: torch.nn.Module) -> Optional[torch.nn.ModuleList]:
+    """Locate the ModuleList of transformer blocks across LLaDA, Dream, Qwen, or Llama models."""
+    _, _, layers = find_transformer_layers_container(model)
+    return layers
 
 
 @contextlib.contextmanager
@@ -143,8 +157,8 @@ def bottom_up_layer_skip(model: torch.nn.Module, skip_count: int, keep_last_laye
     Bypasses `skip_count` contiguous late transformer layers while preserving the final
     transformer layer so the output projection interface remains intact.
     """
-    layers = find_transformer_layers(model)
-    if not layers or skip_count <= 0:
+    parent, attr_name, layers = find_transformer_layers_container(model)
+    if layers is None or skip_count <= 0:
         yield []
         return
 
@@ -154,21 +168,20 @@ def bottom_up_layer_skip(model: torch.nn.Module, skip_count: int, keep_last_laye
     skipped_indices = list(range(start_idx, end_idx))
     skipped_set = set(skipped_indices)
 
-    orig_layers = list(layers)
     orig_cfg_layers = getattr(model.config, "num_hidden_layers", num_layers)
 
-    # Temporarily keep only active layers (bypassing skipped_indices while keeping final layer)
-    kept_layers = [layer for idx, layer in enumerate(orig_layers) if idx not in skipped_set]
-    layers.clear()
-    layers.extend(kept_layers)
+    # Temporarily assign a filtered ModuleList (bypassing skipped_indices while keeping final layer)
+    kept_layers = torch.nn.ModuleList(
+        [layer for idx, layer in enumerate(layers) if idx not in skipped_set]
+    )
+    setattr(parent, attr_name, kept_layers)
     if hasattr(model.config, "num_hidden_layers"):
         model.config.num_hidden_layers = len(kept_layers)
 
     try:
         yield skipped_indices
     finally:
-        layers.clear()
-        layers.extend(orig_layers)
+        setattr(parent, attr_name, layers)
         if hasattr(model.config, "num_hidden_layers"):
             model.config.num_hidden_layers = orig_cfg_layers
 
