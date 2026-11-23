@@ -217,7 +217,7 @@
   "date": "2026-11-23",
   "kind": "preliminary-standalone-characterization",
   "schema_version": 1,
-  "export_generator_sha256": "8ca1ac1798c7d66af75aca74fb0049ea9ed05345efab03070462ecac805bf7e6",
+  "export_generator_sha256": "a9935b4db9f3dc26a87ca8c79c5f71ca263996970fe30b390cd050e86fbfd507",
   "upstream_weight_hashes": [
     {
       "sha256": "84a7f34af2f3f14d767b0106b8fa7f0d7f9b95a0eeac74f2ab3f21bd69a03908",

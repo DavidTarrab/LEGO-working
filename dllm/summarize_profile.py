@@ -88,7 +88,7 @@ def main():
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    plt.rcParams.update({"font.size": 10, "svg.fonttype": "none"})
+    plt.rcParams.update({"font.size": 10, "svg.fonttype": "none", "svg.hashsalt": "lego-dllm-pilot"})
     fig, axis = plt.subplots(figsize=(6.4, 3.8), layout="constrained")
     for item in data["conditions"]:
         axis.scatter([item["steps"]] * 3, [v / 1000 for v in item["individual_request_ms"]], color="#1764a0", s=24, zorder=3)
@@ -103,7 +103,10 @@ def main():
     fig.text(.5, -.02, "Standalone pilot: one fighter prompt, 16 output slots; individual requests. Quality is not established.",
              ha="center", fontsize=8)
     for suffix in ("svg", "png"):
-        fig.savefig(args.output_directory / f"dllm_cuda_latency_{args.date}.{suffix}", dpi=180, bbox_inches="tight")
+        figure_path = args.output_directory / f"dllm_cuda_latency_{args.date}.{suffix}"
+        fig.savefig(figure_path, dpi=180, bbox_inches="tight", metadata={"Date": args.date})
+        if suffix == "svg":
+            figure_path.write_text("\n".join(line.rstrip() for line in figure_path.read_text(encoding="utf-8").splitlines()) + "\n", encoding="utf-8")
     print(json.dumps({"source_revision": data["source_revision"], "conditions": data["conditions"]}, indent=2))
 
 
