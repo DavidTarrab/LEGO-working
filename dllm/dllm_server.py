@@ -30,7 +30,7 @@ def validate_request(request: dict, default_steps: int, default_skip: int) -> di
         raise ValueError("prompt must be nonempty text")
     if type(result["skip_layers"]) is not int or not 0 <= result["skip_layers"] <= 14:
         raise ValueError("skip_layers must be an integer in 0..14")
-    if result["temperature"] != 0 or type(result["seed"]) is not int:
+    if type(result["temperature"]) not in (int, float) or result["temperature"] != 0 or type(result["seed"]) is not int:
         raise ValueError("Only deterministic temperature=0 with an integer seed is validated")
     if request.get("stream", False) is not False or request.get("cache_prompt", False) is not False:
         raise ValueError("Streaming and prompt caching are unsupported")
@@ -83,6 +83,7 @@ class LegoCompatibleHandler(BaseHTTPRequestHandler):
             self.send_json(200, {"status": "ok", "model": self.server.runtime.metadata,
                                  "timing_source": "diffusion-host-wall-v1",
                                  "default_steps": self.server.steps,
+                                 "default_skip_layers": self.server.skip_layers,
                                  "control": self.server.runtime.gate.status()})
         else:
             self.send_json(404, {"error": "Unknown endpoint"})

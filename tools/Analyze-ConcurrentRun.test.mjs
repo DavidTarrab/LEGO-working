@@ -131,4 +131,12 @@ test('diffusion reports generation and actual output counts without autoregressi
   const html = fs.readFileSync(path.join(root,'analysis/report.html'),'utf8');
   assert.match(html,/Diffusion generation/);
   assert.doesNotMatch(html,/Server-reported decode rate/);
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({timing_source:'diffusion-host-wall-v1',diffusion_steps:4,model_revision:'a',quantization:'nf4'}));
+  const baseline = fs.mkdtempSync(path.join(os.tmpdir(),'lego-diffusion-baseline-'));
+  t.after(()=>fs.rmSync(baseline,{recursive:true,force:true}));
+  fs.copyFileSync(path.join(dir,'llm.csv'),path.join(baseline,'llm.csv'));
+  fs.copyFileSync(path.join(dir,'summary.json'),path.join(baseline,'summary.json'));
+  fs.writeFileSync(path.join(baseline,'config.json'),JSON.stringify({timing_source:'diffusion-host-wall-v1',diffusion_steps:8,model_revision:'b',quantization:'bf16'}));
+  const mismatch = analyze({run:root,fps:60,gpuUtcOffset:'-04:00',llmBaseline:baseline});
+  assert.ok(mismatch.metrics.warnings.some(w=>w.includes('diffusion_steps')&&w.includes('model_revision')&&w.includes('quantization')));
 });

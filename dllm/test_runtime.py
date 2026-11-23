@@ -60,7 +60,7 @@ class ProtocolTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 transfer_schedule(tokens, steps)
         for request in ([], {"steps": -1}, {"stream": True}, {"temperature": .2},
-                        {"skip_layers": 99}, {"seed": True}, {"unknown": 4}, {"prompt": ""}):
+                        {"skip_layers": 99}, {"seed": True}, {"unknown": 4}, {"prompt": ""}, {"temperature": False}):
             with self.assertRaises(ValueError):
                 validate_request(request, 4, 0)
 

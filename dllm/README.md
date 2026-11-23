@@ -77,6 +77,12 @@ They are not target-GPU baselines. Dream, generic unknown-model sampling, and th
 old clean-prompt heatmap are outside the checked runtime; add them through
 separate model-specific validation rather than a logits/mask fallback.
 
+The helper uses `max_split_size_mb:128` unless an allocator setting is already
+supplied, and the loader records it. The validated pilot reduced reservation from
+about 10.14 to 4.80 GiB without changing tested output IDs. Read the
+[implementation results](../docs/DLLM_IMPLEMENTATION_RESULTS_2026-11-23.md) for
+the evidence and the separate live-allocation/residency definitions.
+
 ## Serving and external contention
 
 ```powershell
@@ -123,6 +129,12 @@ whole diffusion generation wall time, including admission holds. The analyzer
 labels these explicitly and suppresses autoregressive decode-rate comparisons.
 Use end-to-end latency for the common application comparison, and independently
 evaluate action quality before claiming useful game-action throughput.
+
+For a preliminary paired AR/diffusion capture batch, use
+`tools/Run-LegoDllmCaptureBatch.ps1` from Administrator PowerShell, supplying
+`-ValidationDirectory` for a completed clean batch and `-GameExe` for the corrected
+package. Its default 20 APM is a feasible smoke demand, not the 200 APM target.
+The helper records short fixed-order repeats and does not declare paper readiness.
 
 See [implementation notes](../docs/IMPLEMENTATION_LOG.md) and
 [paper experiment protocol](../docs/EXPERIMENT_PROTOCOL.md) for current evidence,

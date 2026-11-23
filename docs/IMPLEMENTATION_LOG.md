@@ -115,3 +115,34 @@ Continue with a clean-source CUDA batch, aligned unrestricted game captures at
 a feasible demand level, per-model matched AR controls, and quality evaluation.
 Do not use the historical MPS figures or original 20-second Windows results as
 matched comparison baselines. See `docs/EXPERIMENT_PROTOCOL.md` for paper criteria.
+
+### Final evidence from this implementation session
+
+`clean-batch-06`, at clean source `7a35ac2`, passed all nine publisher canvas
+comparisons at 16 positions / 4, 8, and 16 steps, plus the pause/stop/recovery
+checks. The nine warmed requests averaged **2,006.99 / 4,011.78 / 8,034.89 ms**.
+The new allocator configuration retained about **4.80 GiB** during generation
+instead of about **10.14 GiB**, with the same output canvases. This is a sequential
+pilot, not a statistical latency claim. Both reference and adapter run on the
+same NF4 model; BF16 quality equivalence is not established.
+
+The selected public results are in `docs/results/dllm_cuda_validation_2026-11-23.json`
+with standalone SVG/PNG plots. Recreate these from the retained raw batches using
+`dllm/summarize_profile.py`; it refuses failed/dirty/incomplete pilot records.
+The detailed interpretation is `docs/DLLM_IMPLEMENTATION_RESULTS_2026-11-23.md`.
+Raw runs remain in the outer workspace's `runs/dllm-20261123`; source/binary/model
+provenance, failure logs, and both allocator baselines are retained there.
+
+The remaining assistance is Windows ETW elevation and foreground control during
+captures. `tools/Run-LegoDllmCaptureBatch.ps1` is the maintained paired capture
+entrypoint. The original workspace has a convenience wrapper at
+`local/run-dllm-admin-capture.ps1`. It checks the completed `clean-batch-06`, starts
+owned AR/diffusion servers sequentially, records controls and two short game
+repeats per model, and marks the batch preliminary. Its ETW path is not yet
+validated in this execution profile. If a trial fails, retain its logs and fix the
+cause before collecting another directory; do not relabel a failed/background
+capture as successful performance data.
+
+No renderer-controlled diffusion admission exists yet. The next engineering task
+is profiling and bounded chunk execution followed by the native control bridge;
+500 ms whole steps cannot provide useful fine-grained headroom scheduling.

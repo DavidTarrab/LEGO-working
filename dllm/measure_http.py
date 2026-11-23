@@ -92,7 +92,14 @@ def measure(args):
         utc = anchor_utc - timedelta(seconds=(anchor_qpc - origin) / clock.frequency)
         end = origin + args.seconds * clock.frequency
         timing_source = health.get("timing_source", "server-reported")
+        model = health.get("model")
+        model_info = model if isinstance(model, dict) else {}
         config = {"baseline": "external-process", "timing_source": timing_source,
+                  "model": model_info.get("model_id", model),
+                  "model_revision": model_info.get("model_revision"),
+                  "quantization": model_info.get("quantization"),
+                  "diffusion_steps": body.get("steps", health.get("default_steps")),
+                  "skip_layers": health.get("default_skip_layers"),
                   "latency_origin": "scheduled-arrival", "requested_apm": args.apm,
                   "seconds": args.seconds, "tokens": args.tokens, "prompt": args.prompt,
                   "parallel_requests": 1, "cache_prompt": False, "server_health": health,

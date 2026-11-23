@@ -62,6 +62,12 @@ Raw runs, licensed engine files, models and machine-specific logs are excluded.
 
 ## Requirements
 
+The historical table above predates the corrected completion-fence ownership and
+does not monitor window focus. Rebuild and collect fresh matched baselines before
+using those numbers for a performance conclusion. Current CUDA diffusion
+correctness, pilot measurements, and remaining issues are described in
+[the implementation results](docs/DLLM_IMPLEMENTATION_RESULTS_2026-11-23.md).
+
 - Windows, a CUDA-capable NVIDIA GPU and compatible driver. The validated GPU
   has 16 GB VRAM; other hardware needs its own validation.
 - Git, Node.js 18+, Windows PowerShell 5.1+, Visual Studio 2019 C++ build tools
