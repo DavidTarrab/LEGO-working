@@ -19,6 +19,9 @@ struct Nvml {
     decltype(&nvmlDeviceGetUtilizationRates) utilization;
     decltype(&nvmlDeviceGetMemoryInfo) memory;
     decltype(&nvmlDeviceGetPowerUsage) power;
+    decltype(&nvmlDeviceGetClockInfo) clock;
+    decltype(&nvmlDeviceGetTemperature) temperature;
+    decltype(&nvmlDeviceGetPerformanceState) performance;
     template<class T> T load(const char* name) {
         auto result = GetProcAddress(library,name);
         if (!result) throw std::runtime_error(std::string("Missing NVML entry point: ") + name);
@@ -32,6 +35,9 @@ struct Nvml {
             count=load<decltype(count)>("nvmlDeviceGetCount_v2"); device=load<decltype(device)>("nvmlDeviceGetHandleByIndex_v2");
             utilization=load<decltype(utilization)>("nvmlDeviceGetUtilizationRates"); memory=load<decltype(memory)>("nvmlDeviceGetMemoryInfo");
             power=load<decltype(power)>("nvmlDeviceGetPowerUsage");
+            clock=load<decltype(clock)>("nvmlDeviceGetClockInfo");
+            temperature=load<decltype(temperature)>("nvmlDeviceGetTemperature");
+            performance=load<decltype(performance)>("nvmlDeviceGetPerformanceState");
             if (init()!=NVML_SUCCESS) throw std::runtime_error("NVML initialization failed.");
             initialized=true;
         } catch (...) { FreeLibrary(library); library=nullptr; throw; }
@@ -59,7 +65,7 @@ int main(int argc,char** argv) {
         if(nvml.count(&count)!=NVML_SUCCESS||!count) throw std::runtime_error("NVML found no GPU devices.");
         std::ofstream file(std::filesystem::u8path(output));
         if(!file) throw std::runtime_error("Cannot open GPU sample file.");
-        file << "timestamp,index,utilization.gpu [%],memory.used [MiB],memory.total [MiB],power.draw [W]\n" << std::fixed << std::setprecision(3);
+        file << "timestamp,index,utilization.gpu [%],memory.used [MiB],memory.total [MiB],power.draw [W],clocks.sm [MHz],clocks.mem [MHz],temperature.gpu [C],pstate\n" << std::fixed << std::setprecision(3);
         do {
             for(unsigned int i=0;i<count;++i) {
                 nvmlDevice_t device;
@@ -70,11 +76,20 @@ int main(int argc,char** argv) {
                 bool hasUtil=nvml.utilization(device,&util)==NVML_SUCCESS;
                 bool hasMemory=nvml.memory(device,&memory)==NVML_SUCCESS;
                 bool hasPower=nvml.power(device,&power)==NVML_SUCCESS;
+                unsigned int sm=0,mem=0,temp=0; nvmlPstates_t state=NVML_PSTATE_UNKNOWN;
+                bool hasSM=nvml.clock(device,NVML_CLOCK_SM,&sm)==NVML_SUCCESS;
+                bool hasMemClock=nvml.clock(device,NVML_CLOCK_MEM,&mem)==NVML_SUCCESS;
+                bool hasTemp=nvml.temperature(device,NVML_TEMPERATURE_GPU,&temp)==NVML_SUCCESS;
+                bool hasState=nvml.performance(device,&state)==NVML_SUCCESS;
                 file << stamp << ',' << i << ',';
                 if(hasUtil) file << util.gpu;
                 file << ','; if(hasMemory) file << double(memory.used)/1048576.0;
                 file << ','; if(hasMemory) file << double(memory.total)/1048576.0;
                 file << ','; if(hasPower) file << double(power)/1000.0;
+                file << ','; if(hasSM) file << sm;
+                file << ','; if(hasMemClock) file << mem;
+                file << ','; if(hasTemp) file << temp;
+                file << ','; if(hasState) file << static_cast<unsigned int>(state);
                 file << '\n';
             }
             file.flush();

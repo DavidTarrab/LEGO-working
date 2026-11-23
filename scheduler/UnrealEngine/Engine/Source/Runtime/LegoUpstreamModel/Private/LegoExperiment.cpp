@@ -210,7 +210,7 @@ void FLegoUpstreamModel::Run(std::string Prompt, double PeriodMs, TFunction<void
     Metadata->SetNumberField(TEXT("calibration_warmup_actions"), FMath::Max(0, Config.WarmupActions - 1));
     Metadata->SetNumberField(TEXT("context_tokens"), Config.Context);
     Metadata->SetNumberField(TEXT("target_fps"), Config.FPS);
-    Metadata->SetNumberField(TEXT("checkpoint_nodes"), 1);
+    Metadata->SetNumberField(TEXT("checkpoint_nodes"), Config.CheckpointNodes);
     Metadata->SetNumberField(TEXT("skip_depth"), 0);
     Metadata->SetNumberField(TEXT("parallel_requests"), 1);
     Metadata->SetBoolField(TEXT("cache_prompt"), false);
@@ -221,6 +221,7 @@ void FLegoUpstreamModel::Run(std::string Prompt, double PeriodMs, TFunction<void
     WriteJson(FPaths::Combine(RunDir, TEXT("config.json")), Metadata);
     Scheduler.SaveChunkRecords(FPaths::Combine(RunDir, TEXT("chunks.csv")));
     Scheduler.SaveCalibration(FPaths::Combine(RunDir, TEXT("calibration-final.csv")));
+    Scheduler.SaveAdmissionProfile(RunDir);
     if (!Error.IsEmpty()) { UE_LOG(LogLEGOExperiment, Error, TEXT("%s"), *Error); Publish(Error); }
     UE_LOG(LogLEGOExperiment, Display, TEXT("Finished actions=%d skipped=%d misses=%d output=%s"), Completed, Skipped, Misses, *RunDir);
     bRunning.store(false);

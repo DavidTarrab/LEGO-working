@@ -114,3 +114,29 @@ test('integrated timings preserve token accounting, measurement provenance and s
   assert.equal(mismatched.metrics.inputs.shared_measurement_window,false);
   assert.ok(mismatched.metrics.warnings.some(w=>w.includes('provenance does not match')));
 });
+
+test('diffusion reports generation and actual output counts without autoregressive decode claims', t => {
+  const root = fixture(t), dir = path.join(root, 'llm', 'timestamp');
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({timing_source:'diffusion-host-wall-v1',latency_origin:'scheduled-arrival'}));
+  fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({actions:2,elapsed_seconds:1,offered_arrivals:4,on_time_offered_fraction:.25}));
+  const data = analyze({run:root,fps:60,gpuUtcOffset:'-04:00'});
+  assert.equal(data.metrics.llm.decode_ms.mean,null);
+  assert.equal(data.metrics.llm.generation_wall_ms.mean,200);
+  assert.equal(data.metrics.llm.tokenization_ms.mean,15);
+  assert.equal(data.metrics.llm.weighted_decode_tokens_per_second,null);
+  assert.equal(data.metrics.llm.output_tokens_per_generation_second,80);
+  assert.equal(data.metrics.llm.on_time_offered_fraction,.25);
+  assert.match(data.metrics.methodology.decode_rate,/Not applicable/);
+  writeReport(data,path.join(root,'analysis'));
+  const html = fs.readFileSync(path.join(root,'analysis/report.html'),'utf8');
+  assert.match(html,/Diffusion generation/);
+  assert.doesNotMatch(html,/Server-reported decode rate/);
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({timing_source:'diffusion-host-wall-v1',diffusion_steps:4,model_revision:'a',quantization:'nf4'}));
+  const baseline = fs.mkdtempSync(path.join(os.tmpdir(),'lego-diffusion-baseline-'));
+  t.after(()=>fs.rmSync(baseline,{recursive:true,force:true}));
+  fs.copyFileSync(path.join(dir,'llm.csv'),path.join(baseline,'llm.csv'));
+  fs.copyFileSync(path.join(dir,'summary.json'),path.join(baseline,'summary.json'));
+  fs.writeFileSync(path.join(baseline,'config.json'),JSON.stringify({timing_source:'diffusion-host-wall-v1',diffusion_steps:8,model_revision:'b',quantization:'bf16'}));
+  const mismatch = analyze({run:root,fps:60,gpuUtcOffset:'-04:00',llmBaseline:baseline});
+  assert.ok(mismatch.metrics.warnings.some(w=>w.includes('diffusion_steps')&&w.includes('model_revision')&&w.includes('quantization')));
+});

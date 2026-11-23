@@ -21,6 +21,21 @@ function replaceOnce(text, before, after, file) {
   return text.replace(before, after);
 }
 
+function upgradeFenceOwnership(text) {
+  if (!text.includes('TRefCountPtr<FD3D12CommandListFence> Fence;')) return text;
+  if (!text.includes('while (LegoCompletionTasks.GetValue() > 0)'))
+    throw new Error('Borrowed completion fences require the manager shutdown drain; refusing an unsafe hook upgrade.');
+  // FD3D12Fence inherits non-atomic FRefCountedObject. A worker must not
+  // AddRef/Release it concurrently with the RHI thread. The manager owns it
+  // and drains every borrower before destroying either fence or counter.
+  text = replaceOnce(text, 'TRefCountPtr<FD3D12CommandListFence> Fence;',
+    'FD3D12CommandListFence* Fence; // LEGO_FENCE_BORROWED_V2: manager drains before destruction', 'completion fence field');
+  text = replaceOnce(text, 'FLegoFenceCompletion(TRefCountPtr<FD3D12CommandListFence> InFence,',
+    'FLegoFenceCompletion(FD3D12CommandListFence* InFence,', 'completion fence constructor');
+  return replaceOnce(text, 'FAutoDeleteAsyncTask<FLegoFenceCompletion>(CommandListFence, SignaledFenceValue,',
+    'FAutoDeleteAsyncTask<FLegoFenceCompletion>(CommandListFence.GetReference(), SignaledFenceValue,', 'completion fence dispatch');
+}
+
 export function hookEdits(engine) {
   const runtime = path.join(engine, 'Engine/Source/Runtime');
   const transformations = {
@@ -60,7 +75,8 @@ export function hookEdits(engine) {
     const file = path.join(runtime, relative), original = fs.readFileSync(file, 'utf8');
     // Idempotence: do not overwrite subsequent hand edits to a hooked engine.
     const normalized = original.replaceAll('\r\n', '\n');
-    const updated = normalized.includes('LEGO_HOOK') ? original : edit(normalized);
+    let updated = normalized.includes('LEGO_HOOK') ? original : edit(normalized);
+    if (relative === 'D3D12RHI/Private/D3D12DirectCommandListManager.cpp') updated = upgradeFenceOwnership(updated);
     return { file, original, updated };
   });
 }

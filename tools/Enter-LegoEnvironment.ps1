@@ -1,7 +1,7 @@
 # Dot-source before builds and experiments to keep generated data local.
 # This affects this process and its children, not unrelated applications.
 $legoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$legoStorage = Join-Path $legoRoot 'local'
+$legoStorage = if ($env:LEGO_STORAGE_ROOT) { [IO.Path]::GetFullPath($env:LEGO_STORAGE_ROOT) } else { Join-Path $legoRoot 'local' }
 $legoDirectories = @{
     Temp = Join-Path $legoStorage 'temp'
     Downloads = Join-Path $legoStorage 'downloads'

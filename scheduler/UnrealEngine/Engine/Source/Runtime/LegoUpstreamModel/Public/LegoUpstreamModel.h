@@ -11,6 +11,7 @@ struct FLegoUpstreamExperimentConfig
     FString ModelPath, PromptFile, OutputDirectory;
     double Seconds = 120, APM = 200, FPS = 60, AdmissionTimeoutSeconds = 2;
     int32 Tokens = 16, Context = 2048, OperationPolicy = 2, WarmupActions = 3;
+    int32 CheckpointNodes = 1;
 };
 
 // One worker owns context/sampler. Callbacks are dispatched on the game thread.
