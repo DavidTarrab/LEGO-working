@@ -1,5 +1,6 @@
 #pragma once
 #include <mutex>
+#include "LegoStateSignal.h"
 #include "CoreMinimal.h"
 #include "HAL/Runnable.h"
 #include "HAL/ThreadSafeCounter.h"
@@ -46,10 +47,11 @@ public:
 	void SetScheduledCount(const int State);
 	void SetIsInGraphComputing(const bool State);
 	void SetActionCount(const int State);
-    void BeginGPUWork() { PendingGPUWork.Increment(); TotalGPUWork.Increment(); }
-    void EndGPUWork() { const int32 Remaining = PendingGPUWork.Decrement(); check(Remaining >= 0); }
-    void BeginRHIWork() { PendingRHIWork.Increment(); }
-    void EndRHIWork() { const int32 Remaining = PendingRHIWork.Decrement(); check(Remaining >= 0); }
+    FLegoStateSignal AdmissionSignal;
+    void BeginGPUWork() { PendingGPUWork.Increment(); TotalGPUWork.Increment(); AdmissionSignal.Notify(); }
+    void EndGPUWork() { const int32 Remaining = PendingGPUWork.Decrement(); check(Remaining >= 0); AdmissionSignal.Notify(); }
+    void BeginRHIWork() { PendingRHIWork.Increment(); AdmissionSignal.Notify(); }
+    void EndRHIWork() { const int32 Remaining = PendingRHIWork.Decrement(); check(Remaining >= 0); AdmissionSignal.Notify(); }
     bool IsRHIWorkPending() const { return PendingRHIWork.GetValue() > 0 || bRHITaskIsRunning.Load(); }
     int64 GetGPUWorkCount() const { return TotalGPUWork.GetValue(); }
     int64 GetFrameCount() const { return TotalFrames.GetValue(); }

@@ -17,6 +17,7 @@ public:
     bool WaitForAdmission(const char* Node = nullptr);
     void BeginExperiment(double TimeoutSeconds, bool ResetCalibration = true);
     void SaveCalibration(const FString& File);
+    void SaveAdmissionProfile(const FString& Directory);
     void CancelExperiment();
     bool IsCancelled() const { return bCancelled.load(); }
     double GetAdmissionWaitMs() const { return AdmissionWaitMs.load(); }
@@ -85,6 +86,13 @@ private:
     std::atomic<int64> DroppedChunkRecords{0};
     std::atomic<int64> TotalChunks{0}, FrameAdmissions{0}, GPUAdmissions{0}, RHIAdmissions{0};
     uint64 SampleState = 0x9E3779B97F4A7C15ull;
+    bool bAdmissionProfile = false, bFreezeCalibration = false, bOmitChunkRecords = false;
+    int32 AdmissionPollUs = 200;
+    bool bEventWake = false, bNoFit = false;
+    uint64 ProfileCalls = 0, ProfileBlockedCalls = 0, ProfilePolls = 0, ProfileUnknown = 0;
+    uint64 ProfileMasks[16] = {}, ProfileSleepHistogram[6] = {}, ProfileDroppedRows = 0;
+    double ProfileSleepMs = 0, ProfileMaxSleepMs = 0;
+    TArray<FString> AdmissionRecords;
 
 
 };

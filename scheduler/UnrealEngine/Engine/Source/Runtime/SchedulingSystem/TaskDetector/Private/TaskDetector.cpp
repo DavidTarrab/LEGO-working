@@ -92,12 +92,14 @@ void FTaskDetector::SetTotalInferenceIsRunning(const bool State)
 void FTaskDetector::SetRenderingTaskIsRunning(const bool State)
 {
 	bRenderingTaskIsRunning = State;
+    AdmissionSignal.Notify();
 }
 
 void FTaskDetector::SetIsInFrameRendering(const bool State)
 {
 	if (State) TotalFrames.Increment();
 	bIsInFrameRendering = State;
+    AdmissionSignal.Notify();
 }
 
 void FTaskDetector::SetIsInInferring(const bool State)
@@ -108,6 +110,7 @@ void FTaskDetector::SetIsInInferring(const bool State)
 void FTaskDetector::SetRHITaskIsRunning(const bool State)
 {
 	bRHITaskIsRunning = State;
+    AdmissionSignal.Notify();
 }
 
 void FTaskDetector::SetIsPrefilling(const bool State)

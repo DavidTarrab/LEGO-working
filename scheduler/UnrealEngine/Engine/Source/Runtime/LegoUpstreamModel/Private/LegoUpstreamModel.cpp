@@ -54,6 +54,7 @@ bool FLegoUpstreamModel::LoadConfig()
     FParse::Value(Command, TEXT("LegoPolicy="), Config.OperationPolicy);
     FParse::Value(Command, TEXT("LegoTokens="), Config.Tokens);
     FParse::Value(Command, TEXT("LegoWarmup="), Config.WarmupActions);
+    FParse::Value(Command, TEXT("LegoCheckpointNodes="), Config.CheckpointNodes);
     int32 Skip = 0;
     FParse::Value(Command, TEXT("LegoSkipDepth="), Skip);
     if (Skip != 0 || FParse::Param(Command, TEXT("LegoAdaptive")))
@@ -66,6 +67,7 @@ bool FLegoUpstreamModel::LoadConfig()
         !std::isfinite(Config.Seconds) || Config.Seconds <= 0 || Config.Seconds > 86400 ||
         !std::isfinite(Config.AdmissionTimeoutSeconds) || Config.AdmissionTimeoutSeconds <= 0 ||
         Config.OperationPolicy < 0 || Config.OperationPolicy > 2 || Config.Tokens <= 0 ||
+        Config.CheckpointNodes < 0 || Config.CheckpointNodes > 64 || (Config.OperationPolicy != 2 && Config.CheckpointNodes == 0) ||
         Config.Tokens >= Config.Context || Config.Context > 131072 || Config.ModelPath.IsEmpty() || Config.WarmupActions < 1 || Config.WarmupActions > 100)
     {
         UE_LOG(LogLEGO, Error, TEXT("Invalid [LEGO] configuration: require ModelPath and positive bounded APM/FPS/duration/context/tokens."));
@@ -88,7 +90,7 @@ bool FLegoUpstreamModel::Init()
     if (Model) return true;
     if (!LoadConfig()) return false;
     const std::string Path(TCHAR_TO_UTF8(*Config.ModelPath));
-    lego_config Params{Path.c_str(), Config.Context, 99, 1};
+    lego_config Params{Path.c_str(), Config.Context, 99, Config.CheckpointNodes};
     char BackendError[1024] = {};
     Model = lego_create(&Params, BackendError, sizeof(BackendError));
     if (!Model)
@@ -99,8 +101,8 @@ bool FLegoUpstreamModel::Init()
     FTaskScheduler::GetInstance().SetOpPolicy(Config.OperationPolicy);
     FTaskScheduler::GetInstance().SetSkipPolicy(1);
     FTaskScheduler::GetInstance().SetSkipDepth(0);
-    UE_LOG(LogLEGO, Display, TEXT("Model=%s upstream=%s policy=%d skip=0 checkpoints=1 (experimental)"),
-           *Config.ModelPath, UTF8_TO_TCHAR(lego_upstream_commit()), Config.OperationPolicy);
+    UE_LOG(LogLEGO, Display, TEXT("Model=%s upstream=%s policy=%d skip=0 checkpoints=%d (experimental)"),
+           *Config.ModelPath, UTF8_TO_TCHAR(lego_upstream_commit()), Config.OperationPolicy, Config.CheckpointNodes);
     return true;
 }
 void FLegoUpstreamModel::JoinWorker() { if (Worker.joinable()) Worker.join(); }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WindowsPerformanceRecorder Version="1.0" Author="LEGO working prototype">
+  <Profiles>
+    <EventCollector Id="LegoPresentCollector" Name="LEGO presentation events">
+      <BufferSize Value="64"/>
+      <Buffers Value="64"/>
+    </EventCollector>
+    <EventProvider Id="DXGI" Name="Microsoft-Windows-DXGI" Level="5">
+      <Keywords><Keyword Value="0xffffffffffffffff"/></Keywords>
+    </EventProvider>
+    <Profile Id="LegoPresent.Light.File" Name="LegoPresent" Description="DXGI presentation API events without GPU kernel tracing" LoggingMode="File" DetailLevel="Light">
+      <Collectors>
+        <EventCollectorId Value="LegoPresentCollector">
+          <EventProviders><EventProviderId Value="DXGI"/></EventProviders>
+        </EventCollectorId>
+      </Collectors>
+    </Profile>
+  </Profiles>
+</WindowsPerformanceRecorder>

@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidateRange(1, 16)][int]$Jobs = 2, [ValidatePattern('^[0-9]+$')][string]$CudaArchitecture = '120')
+param([ValidateRange(1, 16)][int]$Jobs = 2, [ValidatePattern('^[0-9]+$')][string]$CudaArchitecture = '120', [string]$NvtxIncludeDirectory = '')
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Enter-LegoEnvironment.ps1')
 $source = Join-Path $legoStorage 'llama-upstream'
@@ -29,7 +29,7 @@ foreach ($required in @($cmake, $ninja, $vcvars, (Join-Path $env:LEGO_CUDA_ROOT 
 }
 $env:CUDA_PATH = $env:LEGO_CUDA_ROOT
 $env:PATH = (Join-Path $env:LEGO_CUDA_ROOT 'bin') + ';' + $env:PATH
-$configure = '"{0}" -S "{1}" -B "{2}" -G Ninja -DCMAKE_MAKE_PROGRAM="{3}" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES={5} -DCUDAToolkit_ROOT="{4}" -DCMAKE_CUDA_COMPILER="{4}/bin/nvcc.exe"' -f $cmake, (Join-Path $PSScriptRoot 'native'), $build, $ninja, ($env:LEGO_CUDA_ROOT -replace '\\','/'), $CudaArchitecture
+$configure = '"{0}" -S "{1}" -B "{2}" -G Ninja -DCMAKE_MAKE_PROGRAM="{3}" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES={5} -DCUDAToolkit_ROOT="{4}" -DCMAKE_CUDA_COMPILER="{4}/bin/nvcc.exe" -DLEGO_NVTX_INCLUDE_DIR="{6}"' -f $cmake, (Join-Path $PSScriptRoot 'native'), $build, $ninja, ($env:LEGO_CUDA_ROOT -replace '\\','/'), $CudaArchitecture, $NvtxIncludeDirectory
 & cmd.exe /d /c ('""{0}" >nul && {1}"' -f $vcvars, $configure)
 if ($LASTEXITCODE) { throw 'CMake configuration failed.' }
 & cmd.exe /d /c ('""{0}" >nul && "{1}" --build "{2}" --parallel {3}"' -f $vcvars, $cmake, $build, $Jobs)
@@ -40,6 +40,6 @@ foreach ($pattern in @('cudart64*.dll', 'cublas64*.dll', 'cublasLt64*.dll')) {
 Copy-Item -LiteralPath (Join-Path $source 'LICENSE') -Destination (Join-Path $build 'bin\llama-LICENSE.txt') -Force
 $null = New-Item -ItemType Directory -Force (Join-Path $build 'bin\include')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'native\LegoInference.h') -Destination (Join-Path $build 'bin\include\LegoInference.h') -Force
-@{ upstream_commit = $expected; cuda_root = $env:LEGO_CUDA_ROOT; cuda_graphs = $false; requested_cuda_architecture = $CudaArchitecture; build_type = 'Release' } |
+@{ upstream_commit = $expected; cuda_root = $env:LEGO_CUDA_ROOT; cuda_graphs = $false; requested_cuda_architecture = $CudaArchitecture; build_type = 'Release'; nvtx_compiled = [bool]$NvtxIncludeDirectory } |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $build 'bin\build-info.json') -Encoding UTF8
 Write-Host "LEGO inference runner: $build\bin\lego-infer.exe"

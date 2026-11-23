@@ -45,10 +45,28 @@ test('hook planning is nonmutating, captures fence ownership, and is idempotent 
     fs.writeFileSync(edit.file, edit.updated);
   }
   const gpu = edits.find(e => e.file.endsWith('D3D12DirectCommandListManager.cpp')).updated;
-  assert.ok(gpu.includes('TRefCountPtr<FD3D12CommandListFence> Fence'));
+  assert.ok(gpu.includes('FD3D12CommandListFence* Fence;'));
+  assert.ok(!gpu.includes('TRefCountPtr<FD3D12CommandListFence> Fence'));
+  assert.ok(gpu.includes('CommandListFence.GetReference(), SignaledFenceValue'));
   assert.ok(!gpu.includes('&CommandListFence'));
   assert.ok(gpu.includes('while (LegoCompletionTasks.GetValue() > 0)'));
   for (const edit of hookEdits(root)) assert.equal(edit.original, edit.updated);
+});
+
+test('old non-atomic fence ownership upgrades safely and requires a teardown drain', t => {
+  const root = fixture(t);
+  for (const edit of hookEdits(root)) fs.writeFileSync(edit.file, edit.updated);
+  const file = path.join(root, 'Engine/Source/Runtime/D3D12RHI/Private/D3D12DirectCommandListManager.cpp');
+  const current = fs.readFileSync(file,'utf8');
+  const legacy = current.replace('FD3D12CommandListFence* Fence; // LEGO_FENCE_BORROWED_V2: manager drains before destruction','TRefCountPtr<FD3D12CommandListFence> Fence;')
+    .replace('FLegoFenceCompletion(FD3D12CommandListFence* InFence,','FLegoFenceCompletion(TRefCountPtr<FD3D12CommandListFence> InFence,')
+    .replace('CommandListFence.GetReference(), SignaledFenceValue','CommandListFence, SignaledFenceValue');
+  fs.writeFileSync(file,legacy);
+  const upgrade = hookEdits(root).find(e=>e.file===file);
+  assert.equal(upgrade.updated,current);
+  assert.equal(fs.readFileSync(file,'utf8'),legacy);
+  fs.writeFileSync(file,legacy.replace('while (LegoCompletionTasks.GetValue() > 0)','while (OtherCounter.GetValue() > 0)'));
+  assert.throws(()=>hookEdits(root),/shutdown drain/);
 });
 test('hook planning refuses ambiguous engine anchors', t => {
   const root = fixture(t), file = path.join(root, 'Engine/Source/Runtime/RHI/RHI.Build.cs');

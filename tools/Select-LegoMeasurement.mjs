@@ -3,11 +3,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCsv } from './Analyze-ConcurrentRun.mjs';
 
-export function selectMeasurement(rows, window) {
+export function selectMeasurement(rows, window, options = {}) {
+  // PresentMon 2.x --v1_metrics spells timing column prefixes with lowercase ms.
+  rows = rows.map(row => ({...row, ...Object.fromEntries(Object.entries(row).filter(([key])=>/^ms[A-Z]/.test(key)).map(([key,value])=>['M'+key.slice(1),value]))}));
   if (!window.complete) throw new Error('Measurement window is incomplete.');
   const start = BigInt(window.start_qpc_ticks), end = BigInt(window.end_qpc_ticks);
   const frequency = Number(window.qpc_frequency);
   if (end <= start || !Number.isFinite(frequency) || frequency <= 0) throw new Error('Invalid QPC measurement window.');
+  if (options.processId != null) rows = rows.filter(r => String(r.ProcessID) === String(options.processId));
   const selected = [], seen = new Set();
   let invalid = 0, outside = 0, boundary = 0;
   const ordered = rows.flatMap(row => {
@@ -22,12 +25,26 @@ export function selectMeasurement(rows, window) {
     if (!seen.has(stream)) { seen.add(stream); ++boundary; continue; }
     selected.push({...row, TimeInSeconds: (Number(qpc - start) / frequency).toFixed(9)});
   }
-  if (!selected.length) throw new Error('No complete presentation intervals inside the measurement window. Capture with PresentMon 1.5.2 -qpc_time.');
+  if (!selected.length) throw new Error('No complete presentation intervals inside the measurement window. Capture raw QPC ticks using PresentMon -qpc_time (or --qpc_time --v1_metrics).');
+  const streams = new Map();
+  for (const {row,qpc} of ordered) {
+    const key = `${row.ProcessID}:${row.SwapChainAddress}`;
+    if (!seen.has(key)) continue;
+    const span = streams.get(key) ?? {key,first:qpc,last:qpc};
+    span.last=qpc; streams.set(key,span);
+  }
+  const coverage = [...streams.values()].map(s=>({stream:s.key,
+    start_gap_seconds:Math.max(0,Number(s.first-start)/frequency),
+    end_gap_seconds:Math.max(0,Number(end-s.last)/frequency)}));
+  if (options.maxBoundaryGapSeconds != null && !coverage.some(s=>s.start_gap_seconds<=options.maxBoundaryGapSeconds && s.end_gap_seconds<=options.maxBoundaryGapSeconds)) {
+    throw new Error('Presentation capture does not cover both boundaries of the measurement window.');
+  }
   return {rows: selected, metadata: {
     alignment: 'Windows QueryPerformanceCounter ticks shared by game and PresentMon',
     window_seconds: Number(end - start) / frequency, total_rows: rows.length,
     selected_rows: selected.length, outside_window_rows: outside,
     first_boundary_rows_dropped: boundary, invalid_qpc_rows: invalid,
+    stream_coverage: coverage,
     time_origin: 'game measurement start; startup and inference warmup excluded',
     presentmon_reference: 'https://github.com/GameTechDev/PresentMon/blob/v1.5.2/README.md#csv-columns'
   }};
@@ -35,11 +52,11 @@ export function selectMeasurement(rows, window) {
 const csv = value => '"' + String(value ?? '').replaceAll('"', '""') + '"';
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const [input, measurement, output] = process.argv.slice(2);
+    const [input, measurement, output, processId] = process.argv.slice(2);
     if (!input || !measurement || !output) throw new Error('Usage: node tools/Select-LegoMeasurement.mjs frames-raw.csv measurement.json frames.csv');
     const issues = [];
     const rows = parseCsv(fs.readFileSync(input, 'utf8'), message => issues.push(message));
-    const result = selectMeasurement(rows, JSON.parse(fs.readFileSync(measurement, 'utf8').replace(/^\uFEFF/, '')));
+    const result = selectMeasurement(rows, JSON.parse(fs.readFileSync(measurement, 'utf8').replace(/^\uFEFF/, '')), {processId,maxBoundaryGapSeconds:.25});
     const headers = Object.keys(result.rows[0]);
     fs.writeFileSync(output, [headers.map(csv).join(','), ...result.rows.map(row => headers.map(key => csv(row[key])).join(','))].join('\n') + '\n');
     fs.writeFileSync(output.replace(/\.csv$/i, '') + '.window.json', JSON.stringify({...result.metadata, measurement_file: path.resolve(measurement), malformed_csv_records: issues.length, parse_warnings: issues.slice(0,20)}, null, 2));

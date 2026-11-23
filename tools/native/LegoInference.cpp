@@ -12,6 +12,12 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#ifdef LEGO_WITH_NVTX
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <nvtx3/nvToolsExt.h>
+#endif
 
 using Clock = std::chrono::steady_clock;
 struct lego_inference {
@@ -28,6 +34,18 @@ struct lego_inference {
     Clock::time_point origin;
     lego_event_callback callback = nullptr;
     void* user = nullptr;
+    bool annotate = false;
+    int range_depth = 0;
+    void range_begin(const char* kind, const char* name) {
+#ifdef LEGO_WITH_NVTX
+        if (annotate) { const std::string label = std::string(kind) + name; nvtxRangePushA(label.c_str()); ++range_depth; }
+#endif
+    }
+    void range_end() {
+#ifdef LEGO_WITH_NVTX
+        if (annotate && range_depth) { nvtxRangePop(); --range_depth; }
+#endif
+    }
 
     double elapsed() const { return std::chrono::duration<double, std::milli>(Clock::now() - origin).count(); }
     void emit(const char* kind, const char* node = "", double wait = 0) {
@@ -59,12 +77,17 @@ struct lego_inference {
             // before launching it. The previous observed range is synchronized.
             // Upstream may scan several nodes before choosing a range. Every
             // query is an admission opportunity, not a measured kernel start.
+            self.range_begin("admission:", name);
             self.emit("admission_check", name);
             self.checkpoint(name);
-            return ++self.asked % self.checkpoint_nodes == 0;
+            self.range_end();
+            const bool Observe = ++self.asked % self.checkpoint_nodes == 0;
+            if (Observe) self.range_begin("chunk:", name);
+            return Observe;
         }
         // Upstream synchronizes this backend before invoking ask=false.
         ++self.completed;
+        self.range_end();
         self.emit("chunk_complete", name);
         self.checkpoint(name);
         // Returning false cancels graph evaluation; it is NOT a yield/resume API.
@@ -103,6 +126,7 @@ lego_inference* lego_create(const lego_config* config, char* error, int size) {
             if (ggml_backend_dev_type(ggml_backend_dev_get(i)) == GGML_BACKEND_DEVICE_TYPE_GPU) gpu = true;
         if (!gpu) throw std::runtime_error("No upstream GPU backend registered.");
         result = new lego_inference;
+        result->annotate = std::getenv("LEGO_INFERENCE_NVTX") != nullptr;
         result->checkpoint_nodes = config->checkpoint_nodes;
         auto mp = llama_model_default_params();
         mp.n_gpu_layers = config->gpu_layers;
@@ -159,7 +183,8 @@ int lego_run(lego_inference* self, const char* prompt, int count, lego_event_cal
         if (!self->running.compare_exchange_strong(expected, true)) { error_text(error, size, "Instance already running."); return -1; }
         self->stop = false;
     }
-    struct Reset { lego_inference* s; ~Reset() { s->callback = nullptr; s->running = false; } } reset{self};
+    struct Reset { lego_inference* s; ~Reset() { while (s->range_depth) s->range_end(); s->callback = nullptr; s->running = false; } } reset{self};
+    self->range_begin("action:", "inference");
     self->callback = cb; self->user = user;
     self->origin = Clock::now(); self->asked = 0; self->completed = 0; self->decode_index = 0;
     try {
@@ -188,8 +213,10 @@ int lego_run(lego_inference* self, const char* prompt, int count, lego_event_cal
                 if (!llama_batch_ext_set_output_logits(self->batch, n - 1, true)) throw std::runtime_error("Cannot request logits.");
                 self->checkpoint("decode_start");
                 self->emit("decode_begin");
+                self->range_begin(step == 0 ? "prefill:" : "decode:", std::to_string(step).c_str());
                 if (llama_process(self->context, LLAMA_PROCESS_TYPE_DECODE, self->batch)) throw std::runtime_error("Upstream decode failed.");
                 llama_synchronize(self->context);
+                self->range_end();
                 self->emit("decode_end");
                 if (self->stop) return 1;
                 position += n; offset += n;
