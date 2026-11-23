@@ -82,6 +82,26 @@ Checkpoint completeness and actual quantized-module coverage are also recorded.
 The next clean-source batch must revalidate all three step budgets at 16 output
 positions and repeat timings after this memory change.
 
+The clean `6c63167` batch (`clean-batch-05`) passed all nine publisher comparisons
+at 16 output positions and the full pause/stop/recovery checks. Its nine warmed
+timing samples averaged 2.010 / 4.022 / 8.135 seconds at 4 / 8 / 16 steps. Output
+canvas IDs matched across repetitions, but the four-step malformed output remained.
+Calling `empty_cache` alone did **not** reduce the roughly 10.14 GiB reservation.
+
+A bounded allocator diagnostic with `max_split_size_mb:128` reduced post-load
+reservation to about 4.75 GiB and post-generation reservation to about 4.80 GiB,
+with the same 16-position / four-step canvas IDs as the clean reference. Live
+allocation was unchanged. The helper now selects this setting unless an explicit
+allocator configuration is already supplied; the runtime records the actual
+setting and whether cache release reduced reservation. A second full clean batch
+must validate this configuration before using it for frame experiments.
+
+The first real external orchestration smoke also completed: two requests in a
+six-second arrival window at 20 APM, no skips or completed-request deadline misses,
+complete game coverage of the QPC inference interval, and clean shutdown. It used
+`-SkipPresentMon`, and foreground samples were not valid for comparison. It proves
+integration only; it supplies no FPS or quality-qualified throughput claim.
+
 ### Next work and interpretation
 
 The Python eager MoE path is currently far above the 300 ms / 200 APM target.

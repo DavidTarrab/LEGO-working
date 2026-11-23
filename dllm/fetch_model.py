@@ -31,6 +31,8 @@ def main():
             records[path.name] = {"bytes": path.stat().st_size, "sha256": digest.hexdigest()}
             if path.name in expected and digest.hexdigest() != expected[path.name]:
                 raise ValueError(f"Upstream LFS checksum mismatch: {path.name}")
+    if not set(expected).issubset(records):
+        raise ValueError("Snapshot is missing upstream LFS files")
     args.manifest.parent.mkdir(parents=True, exist_ok=True)
     args.manifest.write_text(json.dumps({"model_id": MODEL_ID, "revision": MODEL_REVISION,
                                          "files": records, "upstream_lfs_hashes_verified": True}, indent=2) + "\n", encoding="utf-8")

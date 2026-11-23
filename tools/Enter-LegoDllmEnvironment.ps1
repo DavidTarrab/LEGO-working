@@ -10,4 +10,5 @@ $env:HF_HUB_DISABLE_XET = '1'
 $env:PIP_CACHE_DIR = Join-Path $legoStorage 'cache\pip'
 $env:MPLCONFIGDIR = Join-Path $legoStorage 'cache\matplotlib'
 $env:PYTHONHASHSEED = '1'
+if (!$env:PYTORCH_CUDA_ALLOC_CONF) { $env:PYTORCH_CUDA_ALLOC_CONF = 'max_split_size_mb:128' }
 Write-Host "CUDA Python: $env:LEGO_PYTHON"

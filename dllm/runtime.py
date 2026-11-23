@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 from dataclasses import asdict, dataclass
 import importlib.metadata
+import os
 import platform
 import re
 import threading
@@ -333,7 +334,9 @@ def load_runtime(*, model_id=MODEL_ID, revision=MODEL_REVISION, device="cuda:0",
                 "quantized_linear_count": sum(type(m).__name__ == "Linear4bit" for m in model.modules()),
                 "load_peak_allocated_bytes": load_peak,
                 "reserved_before_load_cache_release_bytes": load_reserved,
-                "load_cache_released": True,
+                "unused_load_cache_release_invoked": True,
+                "load_cache_reduced_reservation": torch.cuda.memory_reserved(device) < load_reserved,
+                "cuda_allocator_config": os.environ.get("PYTORCH_CUDA_ALLOC_CONF"),
                 "temperature": 0, "seed": 1, "prompt_format": "pinned-instruct-chat-template",
                 "deterministic_algorithms": torch.are_deterministic_algorithms_enabled(),
                 "matmul_allow_tf32": torch.backends.cuda.matmul.allow_tf32,
