@@ -175,6 +175,7 @@ try {
     $metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $trial 'experiment.json') -Encoding UTF8
     $deadline = [DateTime]::UtcNow.AddSeconds($Seconds + 300)
     while (!$gameProcess.WaitForExit(1000)) {
+        if (Test-Path -LiteralPath (Join-Path $trial 'CANCEL')) { throw 'Owned trial cancellation requested; cleaning up game and capture processes.' }
         $gameProcess.Refresh()
         $focusRows.Add(('{0},{1},{2}' -f [DateTime]::UtcNow.ToString('o'),([LegoWindowProbeV2]::ForegroundProcess() -eq $gameProcess.Id),([LegoWindowProbeV2]::IsIconic($gameProcess.MainWindowHandle))))
         if ($capture -and $capture.HasExited) { throw 'PresentMon exited before the game. Inspect presentmon.stderr.log; ETW capture may require elevation.' }

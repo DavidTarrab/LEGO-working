@@ -67,6 +67,7 @@ function chooseLlm(root) {
 export function loadLlm(dir, warnings) {
   const config = readJson(path.join(dir, 'config.json'), true) || {};
   const integrated = config.timing_source === 'integrated-host-wall';
+  const diffusion = config.timing_source === 'diffusion-host-wall-v1';
   const recorded = readJson(path.join(dir, 'summary.json'), true);
   const raw = readCsv(path.join(dir, 'llm.csv'));
   const rows = raw.map(r => ({ utc: Date.parse(r.start_utc), latency: number(r.latency_ms), deadline: number(r.deadline_ms),
@@ -85,6 +86,7 @@ export function loadLlm(dir, warnings) {
   const duration = useRecorded ? recordedSeconds : observedSeconds;
   if (recorded?.success === false) warnings.push(`${dir}: run reports failure/cancellation: ${recorded.error || 'no error text'}. Results are incomplete.`);
   if (integrated) warnings.push('Integrated prompt/decode durations are host wall time including admission waits. They are not pure GPU timings or directly comparable to llama-server timings.');
+  if (diffusion) warnings.push('Diffusion timings are tokenization and whole-canvas generation wall time, including cooperative waits. They are not autoregressive prefill/decode or measured GPU times. Actual output counts exclude EOS and special tokens.');
   const deadlineRows = rows.filter(r => finite(r.deadline) && r.deadline > 0);
   const missed = deadlineRows.filter(r => r.latency > r.deadline).length;
   if (deadlineRows.length !== rows.length) warnings.push(`${dir}: some requests have no valid deadline; miss rate uses only requests with deadlines.`);
@@ -96,18 +98,22 @@ export function loadLlm(dir, warnings) {
     skipped_arrivals: useRecorded ? (recorded.skipped_arrivals ?? null) : null,
     deadline_evaluable_actions: deadlineRows.length, deadline_misses: missed,
     deadline_miss_percent: deadlineRows.length ? 100 * missed / deadlineRows.length : null,
-    latency_ms: stats(rows.map(r => r.latency)), prompt_ms: stats(rows.map(r => r.prompt)), decode_ms: stats(rows.map(r => r.decode)),
+    latency_ms: stats(rows.map(r => r.latency)), prompt_ms: stats(diffusion ? [] : rows.map(r => r.prompt)), decode_ms: stats(diffusion ? [] : rows.map(r => r.decode)),
+    generation_wall_ms: stats(diffusion ? rows.map(r => r.decode) : []), tokenization_ms: stats(diffusion ? rows.map(r => r.prompt) : []),
     timing_source: config.timing_source || 'server-reported', latency_origin: config.latency_origin || 'request-start',
     service_ms: stats(rows.map(r => r.service)), admission_wait_ms: stats(rows.map(r => r.admissionWait)), arrival_lateness_ms: stats(rows.map(r => r.lateness)),
     generated_tokens: stats(rows.map(r => r.tokens)), prompt_tokens: stats(rows.map(r => r.promptTokens)),
-    decode_tokens_per_second: stats(rows.map(r => r.decodeRate)),
-    weighted_decode_tokens_per_second: reportedRateRows.length ? sum(reportedRateRows.map(r => r.decodeRate * r.decode)) / sum(reportedRateRows.map(r => r.decode)) : null,
-    generated_tokens_per_decode_second: decodeRows.length ? 1000 * sum(decodeRows.map(r => integrated ? Math.max(0,r.tokens-1) : r.tokens)) / sum(decodeRows.map(r => r.decode)) : null,
+    decode_tokens_per_second: stats(diffusion ? [] : rows.map(r => r.decodeRate)),
+    weighted_decode_tokens_per_second: !diffusion && reportedRateRows.length ? sum(reportedRateRows.map(r => r.decodeRate * r.decode)) / sum(reportedRateRows.map(r => r.decode)) : null,
+    generated_tokens_per_decode_second: !diffusion && decodeRows.length ? 1000 * sum(decodeRows.map(r => integrated ? Math.max(0,r.tokens-1) : r.tokens)) / sum(decodeRows.map(r => r.decode)) : null,
+    output_tokens_per_generation_second: diffusion && decodeRows.length ? 1000 * sum(decodeRows.map(r => r.tokens)) / sum(decodeRows.map(r => r.decode)) : null,
+    offered_arrivals: useRecorded ? recorded.offered_arrivals ?? null : null,
+    on_time_offered_fraction: useRecorded ? recorded.on_time_offered_fraction ?? null : null,
     http_and_other_overhead_ms: integrated ? null : stats(rows.map(r => r.latency - r.prompt - r.decode)),
     unaccounted_host_time_ms: stats(rows.map(r => r.latency - r.prompt - r.decode)),
     first_request_utc: new Date(start).toISOString(), last_completion_utc: new Date(start + observedSeconds * 1000).toISOString()
   };
-  return { dir, config, recorded, integrated, rows, start, metrics };
+  return { dir, config, recorded, integrated, diffusion, rows, start, metrics };
 }
 export function loadFrames(file, options, warnings) {
   if (!fs.existsSync(file)) { warnings.push(`No frame CSV found at ${file}; frame charts/comparisons omitted.`); return null; }
@@ -263,7 +269,7 @@ export function analyze(options) {
     warnings.push(experiment ? 'Inspect experiment.json and baseline metadata for matching scene, model, graphics settings and launch conditions. Window focus is not monitored.' : 'Model identity, server launch settings, game scene, focus and graphics settings are not recorded by the CSVs; verify they match before interpreting baseline changes.');
     for (const q of ['p50', 'p95', 'p99']) comparison.push(compareMetric(`LLM latency ${q}`, llm.metrics.latency_ms[q], baseline.metrics.latency_ms[q], 'ms'));
     comparison.push(compareMetric('Achieved action rate', llm.metrics.achieved_apm, baseline.metrics.achieved_apm, 'APM', false));
-    comparison.push(compareMetric('Weighted decode rate', llm.metrics.weighted_decode_tokens_per_second, baseline.metrics.weighted_decode_tokens_per_second, 'tokens/s', false));
+    if (!llm.diffusion && !baseline.diffusion) comparison.push(compareMetric('Weighted decode rate', llm.metrics.weighted_decode_tokens_per_second, baseline.metrics.weighted_decode_tokens_per_second, 'tokens/s', false));
   }
   if (frames && frameBaseline) for (const q of ['p50', 'p95', 'p99']) comparison.push(compareMetric(`Frame interval ${q}`, frames.metrics.interval_ms[q], frameBaseline.metrics.interval_ms[q], 'ms'));
   const findings = [];
@@ -296,7 +302,7 @@ export function analyze(options) {
       utrace_present: fs.existsSync(utrace), gpu_utc_offset: options.gpuUtcOffset || 'host local timezone', experiment, shared_measurement_window: sharedWindow },
     methodology: { percentile: 'nearest rank: sorted[ceil(p*n)-1]', frame_measure: 'MsBetweenPresents: application presentation intervals, not pure GPU render time',
       frame_time_origin: frames?.window?.alignment ? 'game measurement start (QPC window)' : 'first valid selected present', llm_gpu_time_origin: 'first LLM request UTC',
-      frame_budget_ms: 1000 / options.fps, decode_rate: llm.integrated ? 'Host decode rate weighted by decode wall duration, including admission waits. The first output token comes from prefill; decode token count is max(0, generated_tokens - 1).' : 'server-reported decode rate weighted by decode duration; generated_tokens_per_decode_second separately divides output token counts by decode duration (token accounting may differ)',
+      frame_budget_ms: 1000 / options.fps, decode_rate: llm.diffusion ? 'Not applicable: diffusion repeatedly evaluates a canvas; use output_tokens_per_generation_second and end-to-end latency.' : llm.integrated ? 'Host decode rate weighted by decode wall duration, including admission waits. The first output token comes from prefill; decode token count is max(0, generated_tokens - 1).' : 'server-reported decode rate weighted by decode duration; generated_tokens_per_decode_second separately divides output token counts by decode duration (token accounting may differ)',
       chart_reduction: 'temporal bucket first/min/max/last; statistics always use all valid rows' },
     llm: llm.metrics, frames: frames?.metrics ?? null, gpu: gpu?.metrics ?? null, chunks:chunkMetrics,
     baselines: { llm: baseline?.metrics ?? null, frames: frameBaseline?.metrics ?? null }, comparison, findings, warnings };
@@ -323,8 +329,8 @@ export function writeReport(data, output) {
     [series('Concurrent', llm.rows, r => r.t, r => r.latency), series('Request deadline', llm.rows, r => r.t, r => r.deadline)]);
   chart('llm-cdf', 'Inference latency distribution', 'End-to-end latency (ms)', 'Cumulative percent',
     [cdf('Concurrent', llm.rows.map(r => r.latency)), ...(baseline ? [cdf('LLM only', baseline.rows.map(r => r.latency))] : [])], [], true);
-  chart('llm-components', llm.integrated ? 'Host prompt and decode times' : 'Server prompt and decode times', 'Seconds from first LLM request', llm.integrated ? 'Host duration (ms)' : 'Server duration (ms)',
-    [series('Prompt', llm.rows, r => r.t, r => r.prompt), series('Decode', llm.rows, r => r.t, r => r.decode)], [], false,
+  chart('llm-components', llm.diffusion ? 'Tokenization and diffusion generation' : llm.integrated ? 'Host prompt and decode times' : 'Server prompt and decode times', 'Seconds from first LLM request', llm.integrated || llm.diffusion ? 'Host duration (ms)' : 'Server duration (ms)',
+    [series(llm.diffusion ? 'Tokenization' : 'Prompt', llm.rows, r => r.t, r => r.prompt), series(llm.diffusion ? 'Generation' : 'Decode', llm.rows, r => r.t, r => r.decode)], [], false,
     llm.integrated ? 'Host durations include admission waits and synchronization. Neither component is a pure GPU kernel measurement.' : 'Server timings exclude HTTP and other request overhead; neither component is a pure GPU kernel measurement.');
   if (llm.integrated) chart('admission-wait','Inference admission waits','Seconds from measurement start','Wait (ms)',[series('Admission wait',llm.rows,r=>r.t,r=>r.admissionWait)]);
   if (chunkRows?.length) chart('inference-chunks','Observed inference chunk completion times','Seconds from measurement start','Host duration (ms)',[series('Retained chunks',chunkRows,r=>r.t,r=>r.ms)],[],false,'Host observations; timeline may be reservoir-sampled. See sampling and total counts in metrics.json.');
@@ -348,8 +354,8 @@ export function writeReport(data, output) {
 <div class="cards">${cards.map(([label, value]) => `<div class="card">${escape(label)}<strong>${escape(value)}</strong></div>`).join('')}</div>
 <section><h2>What this run shows</h2><ul>${m.findings.map(f => `<li>${escape(f)}</li>`).join('')}</ul></section>
 <section><h2>Measurements</h2><div class="scroll"><table><thead><tr><th>Measurement</th><th>Mean</th><th>p50</th><th>p95</th><th>p99</th><th>Maximum</th></tr></thead><tbody>
-${statRow('LLM end-to-end', m.llm.latency_ms, 'ms')}${statRow('Prompt processing', m.llm.prompt_ms, 'ms')}${statRow('Decode', m.llm.decode_ms, 'ms')}${statRow('Generated tokens/request', m.llm.generated_tokens, '')}${m.frames ? statRow('Presentation interval', m.frames.interval_ms, 'ms') : ''}</tbody></table></div>
-<p>${llm.integrated ? 'Host-measured decode rate including admission waits' : 'Server-reported decode rate'}, weighted by decode duration: <b>${fmt(m.llm.weighted_decode_tokens_per_second)} tokens/s</b>. ${llm.integrated ? 'The first output token is produced during prompt processing; subsequent output tokens divided by decode duration' : 'Output token counts divided by decode duration'}: ${fmt(m.llm.generated_tokens_per_decode_second)} tokens/s. Percentiles use nearest rank. Request/frame statistics use all valid rows; chunk statistics use the retained sample.</p>
+${statRow('LLM end-to-end', m.llm.latency_ms, 'ms')}${statRow(llm.diffusion ? 'Tokenization' : 'Prompt processing', llm.diffusion ? m.llm.tokenization_ms : m.llm.prompt_ms, 'ms')}${statRow(llm.diffusion ? 'Diffusion generation' : 'Decode', llm.diffusion ? m.llm.generation_wall_ms : m.llm.decode_ms, 'ms')}${statRow('Generated tokens/request', m.llm.generated_tokens, '')}${m.frames ? statRow('Presentation interval', m.frames.interval_ms, 'ms') : ''}</tbody></table></div>
+<p>${llm.diffusion ? `Autoregressive decode rate is not applicable. Output tokens divided by full generation wall time: ${fmt(m.llm.output_tokens_per_generation_second)} tokens/s. End-to-end latency is the comparable application metric.` : `${llm.integrated ? 'Host-measured decode rate including admission waits' : 'Server-reported decode rate'}, weighted by decode duration: <b>${fmt(m.llm.weighted_decode_tokens_per_second)} tokens/s</b>. ${llm.integrated ? 'The first output token is produced during prompt processing; subsequent output tokens divided by decode duration' : 'Output token counts divided by decode duration'}: ${fmt(m.llm.generated_tokens_per_decode_second)} tokens/s.`} Percentiles use nearest rank. Request/frame statistics use all valid rows; chunk statistics use the retained sample.</p>
 ${m.frames ? `<p>Mean present rate: ${fmt(m.frames.average_present_rate_fps)} FPS. 1000 / p99 interval: ${fmt(m.frames.p99_derived_fps)} FPS (a latency-derived measure). Dropped presents: ${m.frames.dropped_presents}. Selected stream: <code>${escape(JSON.stringify(m.frames.stream))}</code>.</p>` : ''}</section>
 ${comparisonRows ? `<section><h2>Baseline comparison</h2><div class="scroll"><table><tr><th>Measurement</th><th>Baseline</th><th>Concurrent</th><th>Change</th></tr>${comparisonRows}</table></div><p class="muted">Positive change means the numeric value increased. Lower latency is preferable; higher throughput is preferable. Single-run changes are descriptive.</p></section>` : ''}
 ${charts.map(c => `<figure>${c.svg}<figcaption>${escape(c.note)} <a href="charts/${c.name}.svg" download>Download SVG</a></figcaption></figure>`).join('')}

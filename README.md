@@ -10,6 +10,11 @@ experiment harness using Unreal Engine 4.27.2 and upstream llama.cpp.
 reviews the merged diffusion harness, current issues, and the remaining work for
 a controlled game co-scheduling comparison with autoregressive inference.
 
+Implementation progress and reproducible commands are recorded in
+[the implementation log](docs/IMPLEMENTATION_LOG.md),
+[the checked diffusion runtime guide](dllm/README.md), and
+[the paper experiment protocol](docs/EXPERIMENT_PROTOCOL.md).
+
 The supported experiment runs a real Unreal scene and a full LLM on one GPU,
 comparing unrestricted inference with inter-frame and intra-frame admission.
 It produces frame-time, latency, deadline, GPU-utilization and chunk reports.
