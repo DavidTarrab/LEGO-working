@@ -6,6 +6,10 @@ experiment harness using Unreal Engine 4.27.2 and upstream llama.cpp.
 [Paper](https://doi.org/10.1109/HPCA68181.2026.11408477) ·
 [Windows setup](WINDOWS_SETUP.md) · [Analysis guide](tools/ANALYSIS.md)
 
+[Diffusion LLM project status and implementation plan](docs/DLLM_PROJECT_STATUS_2026-11-23.md)
+reviews the merged diffusion harness, current issues, and the remaining work for
+a controlled game co-scheduling comparison with autoregressive inference.
+
 The supported experiment runs a real Unreal scene and a full LLM on one GPU,
 comparing unrestricted inference with inter-frame and intra-frame admission.
 It produces frame-time, latency, deadline, GPU-utilization and chunk reports.
